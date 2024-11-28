@@ -1,0 +1,206 @@
+-- Create the database
+CREATE DATABASE student_admin_system;
+USE db_student_system;
+
+-- Create tables
+CREATE TABLE users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role ENUM('student', 'admin') NOT NULL
+);
+
+CREATE TABLE students (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE subjects (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE schedules (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    subject_id INT,
+    room VARCHAR(50) NOT NULL,
+    day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday') NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    FOREIGN KEY (subject_id) REFERENCES subjects(id)
+);
+
+CREATE TABLE student_schedules (
+    student_id INT,
+    schedule_id INT,
+    PRIMARY KEY (student_id, schedule_id),
+    FOREIGN KEY (student_id) REFERENCES students(id),
+    FOREIGN KEY (schedule_id) REFERENCES schedules(id)
+);
+
+-- Stored Procedures
+
+-- Get student profile
+DELIMITER //
+CREATE PROCEDURE get_student_profile(IN p_user_id INT)
+BEGIN
+    SELECT s.* FROM students s
+    JOIN users u ON s.user_id = u.id
+    WHERE u.id = p_user_id AND u.role = 'student';
+END //
+DELIMITER ;
+
+-- Update student profile
+DELIMITER //
+CREATE PROCEDURE update_student_profile(
+    IN p_user_id INT,
+    IN p_first_name VARCHAR(50),
+    IN p_last_name VARCHAR(50),
+    IN p_email VARCHAR(100)
+)
+BEGIN
+    UPDATE students s
+    JOIN users u ON s.user_id = u.id
+    SET s.first_name = p_first_name,
+        s.last_name = p_last_name,
+        s.email = p_email
+    WHERE u.id = p_user_id AND u.role = 'student';
+END //
+DELIMITER ;
+
+-- Get student schedule
+DELIMITER //
+CREATE PROCEDURE get_student_schedule(IN p_student_id INT)
+BEGIN
+    SELECT s.name AS subject, sc.room, sc.day_of_week, sc.start_time, sc.end_time
+    FROM student_schedules ss
+    JOIN schedules sc ON ss.schedule_id = sc.id
+    JOIN subjects s ON sc.subject_id = s.id
+    WHERE ss.student_id = p_student_id;
+END //
+DELIMITER ;
+
+-- Admin: Add student
+DELIMITER //
+CREATE PROCEDURE add_student(
+    IN p_username VARCHAR(50),
+    IN p_password VARCHAR(255),
+    IN p_first_name VARCHAR(50),
+    IN p_last_name VARCHAR(50),
+    IN p_email VARCHAR(100)
+)
+BEGIN
+    INSERT INTO users (username, password, role) VALUES (p_username, p_password, 'student');
+    SET @user_id = LAST_INSERT_ID();
+    INSERT INTO students (user_id, first_name, last_name, email)
+    VALUES (@user_id, p_first_name, p_last_name, p_email);
+END //
+DELIMITER ;
+
+-- Admin: Add class schedule
+DELIMITER //
+CREATE PROCEDURE add_class_schedule(
+    IN p_subject_id INT,
+    IN p_room VARCHAR(50),
+    IN p_day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'),
+    IN p_start_time TIME,
+    IN p_end_time TIME
+)
+BEGIN
+    INSERT INTO schedules (subject_id, room, day_of_week, start_time, end_time)
+    VALUES (p_subject_id, p_room, p_day_of_week, p_start_time, p_end_time);
+END //
+DELIMITER ;
+
+-- Admin: Edit student profile
+DELIMITER //
+CREATE PROCEDURE admin_edit_student_profile(
+    IN p_student_id INT,
+    IN p_first_name VARCHAR(50),
+    IN p_last_name VARCHAR(50),
+    IN p_email VARCHAR(100)
+)
+BEGIN
+    UPDATE students
+    SET first_name = p_first_name,
+        last_name = p_last_name,
+        email = p_email
+    WHERE id = p_student_id;
+END //
+DELIMITER ;
+
+-- Admin: Edit class schedule
+DELIMITER //
+CREATE PROCEDURE admin_edit_class_schedule(
+    IN p_schedule_id INT,
+    IN p_subject_id INT,
+    IN p_room VARCHAR(50),
+    IN p_day_of_week ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'),
+    IN p_start_time TIME,
+    IN p_end_time TIME
+)
+BEGIN
+    UPDATE schedules
+    SET subject_id = p_subject_id,
+        room = p_room,
+        day_of_week = p_day_of_week,
+        start_time = p_start_time,
+        end_time = p_end_time
+    WHERE id = p_schedule_id;
+END //
+DELIMITER ;
+
+-- Admin: View all students
+DELIMITER //
+CREATE PROCEDURE view_all_students()
+BEGIN
+    SELECT s.*, u.username
+    FROM students s
+    JOIN users u ON s.user_id = u.id;
+END //
+DELIMITER ;
+
+-- Admin: View all class schedules
+DELIMITER //
+CREATE PROCEDURE view_all_class_schedules()
+BEGIN
+    SELECT sc.*, s.name AS subject_name
+    FROM schedules sc
+    JOIN subjects s ON sc.subject_id = s.id;
+END //
+DELIMITER ;
+
+-- Admin: Delete student
+DELIMITER //
+CREATE PROCEDURE delete_student(IN p_student_id INT)
+BEGIN
+    DELETE FROM student_schedules WHERE student_id = p_student_id;
+    DELETE s, u FROM students s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.id = p_student_id;
+END //
+DELIMITER ;
+
+-- Admin: Delete class schedule
+DELIMITER //
+CREATE PROCEDURE delete_class_schedule(IN p_schedule_id INT)
+BEGIN
+    DELETE FROM student_schedules WHERE schedule_id = p_schedule_id;
+    DELETE FROM schedules WHERE id = p_schedule_id;
+END //
+DELIMITER ;
+
+DELIMITER //
+CREATE PROCEDURE assign_student_to_schedule(
+    IN p_student_id INT,
+    IN p_schedule_id INT
+)
+BEGIN
+    INSERT INTO student_schedules (student_id, schedule_id)
+    VALUES (p_student_id, p_schedule_id);
+END //
+DELIMITER ;
